@@ -1,0 +1,14 @@
+# Ambiente Virtual
+venv/
+env/
+
+# Arquivos compilados do Python (lixo gerado automaticamente)
+__pycache__/
+*.pyc
+
+# Arquivos do Docker (opcional, mas bom ignorar logs)
+*.log
+
+# Banco de dados local (você não quer subir seus dados de teste)
+image_database.json
+database_evolved.json
