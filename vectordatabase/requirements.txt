@@ -6,3 +6,4 @@ Pillow
 regex
 ftfy
 tqdm
+rich

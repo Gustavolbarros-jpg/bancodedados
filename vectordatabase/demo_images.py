@@ -1,215 +1,161 @@
 """
-Demonstração do MultimodalDB
-Busca de imagens usando texto e vice-versa
+MultimodalDB Interativo
+Menu controlado pelo usuário para busca e indexação
 """
+import os
+import sys
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich import box
+from rich.prompt import Prompt, IntPrompt
 
 from multimodal_db import MultimodalDB
-import os
 
-print("="*70)
-print("🖼️  MultimodalDB - Sistema de Busca Visual")
-print("="*70)
-print()
-
-# Inicializa banco
+# Inicializa console e banco
+console = Console()
 db = MultimodalDB("image_database.json")
 
-# ============================================
-# TESTE 1: Indexar pasta de imagens
-# ============================================
-print("📂 TESTE 1: Indexando pasta de imagens")
-print("-"*70)
-print("Instruções:")
-print("1. Crie uma pasta chamada 'images' no diretório atual")
-print("2. Adicione algumas imagens de teste (screenshots, fotos, etc.)")
-print()
+def clear():
+    """Limpa a tela (compatível com Linux/Docker)"""
+    os.system('cls' if os.name == 'nt' else 'clear')
 
-# Verifica se pasta existe
-if os.path.exists("images"):
-    stats = db.add_folder(
-        "images",
-        metadata={"source": "demo", "indexed_date": "2024-12-08"}
-    )
-else:
-    print("[⚠️] Pasta 'images' não encontrada.")
-    print("[ℹ️] Criando pasta de exemplo...")
-    os.makedirs("images", exist_ok=True)
-    print("[✅] Pasta criada! Adicione imagens e rode novamente.")
-    print()
+def header():
+    clear()
+    console.print(Panel.fit(
+        "[bold cyan]🤖 MultimodalDB Interactive CLI[/]\n"
+        "[dim]Sistema de Busca Semântica com CLIP[/]",
+        border_style="blue"
+    ))
 
-# ============================================
-# TESTE 2: Estatísticas
-# ============================================
-db.print_stats()
+def display_results(query, results):
+    """Exibe resultados bonitos"""
+    if not results:
+        console.print(f"\n[bold red]❌ Nada encontrado para: '{query}'[/]")
+        return
 
-# Verifica se há imagens indexadas
-if db.storage.count() == 0:
-    print("\n" + "="*70)
-    print("⚠️  AVISO: Banco de imagens vazio!")
-    print("="*70)
-    print("\nPara testar o sistema:")
-    print("1. Adicione imagens na pasta 'images/'")
-    print("2. Execute novamente: python demo_images.py")
-    print("\nExemplos de imagens que funcionam bem:")
-    print("  • Capturas de tela")
-    print("  • Fotos de animais")
-    print("  • Gráficos e diagramas")
-    print("  • Interfaces de software")
-    print("  • Paisagens")
-    print()
-    exit(0)
-
-# ============================================
-# TESTE 3: Busca por texto
-# ============================================
-print("\n" + "="*70)
-print("🔎 TESTE 3: Busca de imagens por texto")
-print("-"*70)
-
-queries = [
-    "dog or cat",
-    "chart or graph",
-    "landscape or nature",
-    "person or people",
-    "computer or screen"
-]
-
-print("\nExemplos de queries que você pode testar:")
-for i, q in enumerate(queries, 1):
-    print(f"  {i}. {q}")
-
-print("\n" + "-"*70)
-print("Digite sua query (ou Enter para usar 'dog or cat'):")
-user_query = input("Query: ").strip()
-
-if not user_query:
-    user_query = "dog or cat"
-
-print(f"\n🔍 Buscando por: '{user_query}'")
-print("-"*70)
-
-results = db.search_by_text(user_query, top_k=5, min_score=0.15, verbose=False)
-
-if results:
-    print(f"\n✅ Encontrados {len(results)} resultados:\n")
-    for i, result in enumerate(results, 1):
-        print(f"{i}. Score: {result['score']:.4f}")
-        print(f"   Arquivo: {result['filename']}")
-        print(f"   Caminho: {result['image_path']}")
-        print(f"   Metadata: {result['metadata']}")
-        print()
-else:
-    print("\n❌ Nenhum resultado encontrado.")
-    print("Dicas:")
-    print("  • Tente queries mais genéricas")
-    print("  • Reduza o min_score")
-    print("  • Adicione mais imagens variadas")
-
-# ============================================
-# TESTE 4: Busca por imagem similar
-# ============================================
-print("\n" + "="*70)
-print("🖼️  TESTE 4: Busca de imagens similares")
-print("-"*70)
-
-indexed_images = db.storage.get_all_paths()
-
-if len(indexed_images) > 0:
-    reference_image = indexed_images[0]
-    print(f"\nUsando como referência: {reference_image}")
-    print(f"Buscando imagens similares...")
-    print("-"*70)
+    console.print(f"\n[bold green]✅ Resultados para: '{query}'[/]")
     
-    results = db.search_by_image(reference_image, top_k=3, min_score=0.3, verbose=False)
+    table = Table(box=box.ROUNDED, show_header=True, header_style="bold magenta")
+    table.add_column("#", style="dim", width=4)
+    table.add_column("Score", justify="right")
+    table.add_column("Confiança Visual", width=20)
+    table.add_column("Arquivo", style="cyan")
+    table.add_column("Metadados")
+
+    for i, res in enumerate(results, 1):
+        score = res['score']
+        
+        # Lógica visual de confiança
+        confidence_pct = min((score / 0.32) * 100, 100)
+        bar_len = int(confidence_pct / 5)
+        bar = "█" * bar_len + "░" * (20 - bar_len)
+        
+        # Cores dinâmicas
+        color = "green" if i == 1 else "yellow" if i <= 3 else "white"
+        if score < 0.23: color = "red" # Alerta para resultados fracos
+
+        table.add_row(
+            str(i),
+            f"{score:.4f}",
+            f"[{color}]{bar}[/]",
+            res['filename'],
+            str(res.get('metadata', ''))
+        )
+
+    console.print(table)
+
+def menu_indexar():
+    console.print("\n[bold yellow]📂 Indexar Imagens[/]")
+    pasta = Prompt.ask("Nome da pasta", default="images")
     
-    if results:
-        print(f"\n✅ Imagens similares encontradas:\n")
-        for i, result in enumerate(results, 1):
-            print(f"{i}. Score: {result['score']:.4f}")
-            print(f"   Arquivo: {result['filename']}")
-            print(f"   Caminho: {result['image_path']}")
-            print()
+    if not os.path.exists(pasta):
+        console.print(f"[red]Erro: Pasta '{pasta}' não existe![/]")
+        return
+
+    stats = db.add_folder(pasta, verbose=True)
+    console.print(f"[green]Concluído![/] Adicionadas: {stats['added']}")
+    Prompt.ask("\n[dim]Pressione Enter para voltar...[/]")
+
+def menu_busca_texto():
+    # Exemplos de queries que funcionam bem
+    sugestoes = [
+        "dog", "cat", "forest", "technology", 
+        "red car", "beach", "city", "python code"
+    ]
+
+    while True:
+        console.print("\n[bold yellow]🔍 Busca por Texto[/]")
+        
+        # Mostra os exemplos formatados
+        console.print(f"[dim]Sugestões: {', '.join(sugestoes)}[/]")
+
+        query = Prompt.ask("Digite sua busca (ou '0' para voltar)")
+        
+        if query == '0': break
+        
+        # Filtro: min_score 0.15 ajuda a tirar resultados muito ruins
+        results = db.search_by_text(query, top_k=5, min_score=0.15, verbose=False)
+        display_results(query, results)
+
+def menu_busca_imagem():
+    console.print("\n[bold yellow]🖼️  Busca por Imagem Similar[/]")
+    
+    # Lista algumas imagens para ajudar o usuário
+    imgs = db.storage.get_all_paths()[:10]
+    if not imgs:
+        console.print("[red]O banco está vazio![/]")
+        return
+
+    console.print("Exemplos disponíveis:")
+    for img in imgs:
+        console.print(f" - {os.path.basename(img)}")
+    
+    filename = Prompt.ask("\nDigite o nome do arquivo (ex: cachorro1.jpeg)")
+    path = os.path.join("images", filename) # Assumindo pasta padrão
+
+    if not os.path.exists(path):
+        # Tenta achar no banco se o caminho for diferente
+        full_path = next((i for i in imgs if filename in i), None)
+        path = full_path if full_path else path
+
+    if os.path.exists(path):
+        # Mude de 0.25 para 0.85 ou 0.90 se quiser apenas MUITO parecidos
+        results = db.search_by_image(path, top_k=5, min_score=0.85, verbose=False)
+        display_results(filename, results)
     else:
-        print("\n[ℹ️] Nenhuma imagem similar encontrada (ou banco tem apenas 1 imagem)")
-else:
-    print("\n[⚠️] Adicione mais imagens para testar busca por similaridade")
-
-# ============================================
-# TESTE 5: Múltiplas queries
-# ============================================
-print("\n" + "="*70)
-print("🎯 TESTE 5: Teste rápido com múltiplas queries")
-print("-"*70)
-
-test_queries = [
-    ("animal", 2),
-    ("technology", 2),
-    ("nature", 2),
-]
-
-for query, k in test_queries:
-    results = db.search_by_text(query, top_k=k, min_score=0.15, verbose=False)
+        console.print("[red]Arquivo não encontrado![/]")
     
-    if results:
-        print(f"\n🔎 '{query}' → {len(results)} resultado(s)")
-        for r in results:
-            print(f"   • {r['filename']} (score: {r['score']:.4f})")
-# ==============================================================================
-# ⏬ COLOQUE ISTO NO FINAL (SUBSTITUA O TESTE 6 ATUAL) ⏬
-# ==============================================================================
+    Prompt.ask("\n[dim]Pressione Enter para voltar...[/]")
 
-print("\n" + "="*70)
-print("🛠️ TESTE 6: Manipulação Específica (Cenário Poste/Refri/Naruto)")
-print("-" * 70)
+def main():
+    while True:
+        header()
+        db.print_stats()
+        
+        console.print(Panel(
+            "[1] 📂 Indexar Pasta\n"
+            "[2] 🔍 Buscar por Texto\n"
+            "[3] 🖼️  Buscar por Imagem\n"
+            "[4] ❌ Sair",
+            title="Menu Principal",
+            border_style="green"
+        ))
 
-# CORREÇÃO AQUI: Note o .jpeg no final
-imgs_teste = ["poste.jpg", "refrigerante.jpeg", "naruto.jpeg"]
-caminho_base = "images"
+        opcao = IntPrompt.ask("Escolha uma opção", choices=["1", "2", "3", "4"])
 
-# 1. Tenta garantir que elas estão no banco
-print("1️⃣  Verificando imagens de teste...")
-for img in imgs_teste:
-    caminho_completo = os.path.join(caminho_base, img)
-    if os.path.exists(caminho_completo):
-        db.add_image(caminho_completo, verbose=False)
-    else:
-        print(f"[❌] Faltou colocar o arquivo na pasta: {img}")
+        if opcao == 1:
+            menu_indexar()
+        elif opcao == 2:
+            menu_busca_texto()
+        elif opcao == 3:
+            menu_busca_imagem()
+        elif opcao == 4:
+            console.print("[bold blue]Saindo... Até mais! 👋[/]")
+            sys.exit()
 
-# 2. UPDATE: Atualiza o poste (que é .jpg mesmo)
-print("\n2️⃣  Atualizando o Poste...")
-db.update_image_info("poste.jpg", {
-    "tipo": "infraestrutura", 
-    "status": "verificado", 
-    "obs": "poste de luz intacto"
-})
-
-# 3. DELETE: Remove Naruto e Refrigerante (agora com .jpeg)
-print("\n3️⃣  Removendo o que não é desejado...")
-db.remove_image("naruto.jpeg")       # <--- .jpeg aqui
-db.remove_image("refrigerante.jpeg") # <--- .jpeg aqui
-
-# 4. CONFERÊNCIA FINAL
-print("\n4️⃣  Conferência:")
-todas = db.storage.load()
-
-# Verifica se o poste ficou
-poste_no_banco = next((item for item in todas if item["filename"] == "poste.jpg"), None)
-if poste_no_banco:
-    print(f"✅ O Poste permaneceu com metadados: {poste_no_banco.get('metadata')}")
-
-# Verifica se os outros sumiram
-restos = [i for i in todas if i["filename"] in ["naruto.jpeg", "refrigerante.jpeg"]]
-if not restos:
-    print("✅ Naruto e Refrigerante foram eliminados com sucesso.")
-else:
-    print(f"❌ Ops, ainda sobraram: {[i['filename'] for i in restos]}")
-
-print(f"\nTotal final de imagens no banco: {len(todas)}")
-
-# ==============================================================================
-# ⏫ FIM DO CÓDIGO ⏫
-# ==============================================================================
-print("\n" + "="*70)
-print("✅ Demonstração concluída!")
-print("="*70)
-
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        console.print("\n[bold red]Interrompido pelo usuário.[/]")

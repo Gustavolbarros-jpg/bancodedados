@@ -188,10 +188,13 @@ class MultimodalDB:
                 "metadata": data.get("metadata", {})
             })
         
-        # Ordena e retorna top-k
+        # No final do método search_by_text em multimodal_db.py
         results.sort(key=lambda x: x["score"], reverse=True)
-        
-        return results[:top_k]
+
+        # APLICAÇÃO DO FILTRO INTELIGENTE
+        final_results = self._filter_results(results)
+
+        return final_results[:top_k]
     
     def search_by_image(self, image_path, top_k=5, min_score=0.0, verbose=True):
         """
@@ -289,3 +292,33 @@ class MultimodalDB:
         else:
             print(f"[⚠️] Erro ao atualizar: {filename}")
         return success
+    
+    def _filter_results(self, results, drop_threshold=0.15):
+        """
+        Filtra resultados que estão muito distantes semanticamente do Top-1.
+        drop_threshold: 0.15 significa que aceitamos resultados até 15% piores que o líder.
+        """
+        if not results:
+            return []
+
+        best_score = results[0]['score']
+        # Threshold dinâmico: o score deve ser pelo menos X% do melhor score
+        # Se o melhor é 0.27, o corte (0.85) seria ~0.229. O gato (0.21) seria cortado.
+        cutoff_score = best_score * (1.0 - drop_threshold) 
+        
+        filtered = [r for r in results if r['score'] >= cutoff_score]
+        
+        # Se filtramos muito, garantimos pelo menos 1 resultado se o score for razoável
+        if not filtered and best_score > 0.15:
+            return [results[0]]
+            
+        return filtered
+    
+    def calculate_confidence(score, best_possible=0.35):
+        """
+        Transforma o cosseno cru do CLIP (que raramente passa de 0.4 em zero-shot)
+        em uma porcentagem legível para humanos.
+        """
+        # 0.35 é um valor empírico alto para CLIP B/32 zero-shot
+        confidence = (score / best_possible) * 100
+        return min(confidence, 99.9) # Cap em 99.9%
